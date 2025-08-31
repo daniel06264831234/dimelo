@@ -3,6 +3,7 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const { MongoClient } = require('mongodb');
 const cors = require('cors');
+const fs = require('fs');
 
 const app = express(); // <-- Primero declara app
 const http = require('http').createServer(app); // <-- Luego usa app aquí
@@ -19,6 +20,41 @@ app.use(bodyParser.json());
 
 const pedidos = []; // Almacena los pedidos en memoria
 
+// --- Ganancias en archivo local ---
+const GANANCIAS_FILE = path.join(__dirname, 'ganancias.json');
+let gananciasSemana = 0;
+
+// Cargar ganancias desde archivo al iniciar
+function cargarGanancias() {
+    try {
+        if (fs.existsSync(GANANCIAS_FILE)) {
+            const data = fs.readFileSync(GANANCIAS_FILE, 'utf8');
+            const obj = JSON.parse(data);
+            gananciasSemana = typeof obj.ganancias === 'number' ? obj.ganancias : 0;
+        }
+    } catch (e) {
+        gananciasSemana = 0;
+    }
+}
+function guardarGanancias() {
+    fs.writeFileSync(GANANCIAS_FILE, JSON.stringify({ ganancias: gananciasSemana }), 'utf8');
+}
+cargarGanancias();
+
+// Endpoint para consultar ganancias
+app.get('/ganancias', (req, res) => {
+    res.json({ ganancias: gananciasSemana });
+});
+
+// Endpoint para reiniciar ganancias
+app.post('/ganancias/reiniciar', (req, res) => {
+    gananciasSemana = 0;
+    guardarGanancias();
+    res.json({ ok: true, ganancias: gananciasSemana });
+});
+
+// --- FIN ganancias local ---
+
 app.post('/pedido', (req, res) => {
     const pedido = req.body;
     // Validar que al menos haya un producto con cantidad > 0
@@ -29,7 +65,18 @@ app.post('/pedido', (req, res) => {
         return res.status(400).json({ mensaje: 'Debes seleccionar al menos un producto.' });
     }
     pedidos.push(pedido); // Guarda el pedido en memoria
-    console.log('Pedido recibido:', pedido);
+
+    // Sumar al total de ganancias
+    let total = 0;
+    if (typeof pedido.total === 'string') {
+        total = parseFloat(pedido.total.replace(/[^0-9.]/g, '')) || 0;
+    } else if (typeof pedido.total === 'number') {
+        total = pedido.total;
+    }
+    gananciasSemana += total;
+    guardarGanancias();
+
+    io.emit('pedidoNuevo'); // Notifica a los clientes en tiempo real
     res.json({ mensaje: 'Pedido recibido. ¡Gracias!' });
 });
 
