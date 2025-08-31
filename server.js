@@ -31,6 +31,17 @@ app.get('/pedidos', (req, res) => {
     res.json(pedidos);
 });
 
+app.delete('/pedidos/:idx', (req, res) => {
+    const idx = parseInt(req.params.idx, 10);
+    if (!isNaN(idx) && idx >= 0 && idx < pedidos.length) {
+        pedidos.splice(idx, 1);
+        io.emit('pedidoActualizado'); // Notifica a los clientes
+        res.json({ mensaje: 'Pedido finalizado y eliminado' });
+    } else {
+        res.status(400).json({ error: 'Índice inválido' });
+    }
+});
+
 const MONGO_URI = 'mongodb+srv://daniel:daniel25@so.k6u9iol.mongodb.net/?retryWrites=true&w=majority&appName=so&authSource=admin';
 const DB_NAME = 'so';
 const MENU_COLLECTION = 'menu';
@@ -83,4 +94,3 @@ app.post('/menu', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-
