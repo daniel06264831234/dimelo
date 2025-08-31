@@ -21,6 +21,13 @@ const pedidos = []; // Almacena los pedidos en memoria
 
 app.post('/pedido', (req, res) => {
     const pedido = req.body;
+    // Validar que al menos haya un producto con cantidad > 0
+    const productos = Object.entries(pedido).filter(([key, val]) =>
+        typeof val === 'object' && val !== null && val.cantidad > 0
+    );
+    if (productos.length === 0) {
+        return res.status(400).json({ mensaje: 'Debes seleccionar al menos un producto.' });
+    }
     pedidos.push(pedido); // Guarda el pedido en memoria
     console.log('Pedido recibido:', pedido);
     res.json({ mensaje: 'Pedido recibido. ¡Gracias!' });
@@ -94,3 +101,4 @@ app.post('/menu', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
+
