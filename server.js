@@ -3,6 +3,11 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const { MongoClient } = require('mongodb');
 const cors = require('cors'); // <-- Agrega esta línea
+const http = require('http').createServer(app);
+const { Server } = require('socket.io');
+const io = new Server(http, {
+    cors: { origin: '*' }
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -65,6 +70,7 @@ app.post('/menu', async (req, res) => {
         const db = client.db(DB_NAME);
         const result = await db.collection(MENU_COLLECTION).insertOne({ nombre, precio });
         await cargarMenu(); // Actualiza el menú en memoria
+        io.emit('menuActualizado'); // Notifica a todos los clientes
         res.json({ mensaje: 'Producto agregado', id: result.insertedId });
     } catch (err) {
         res.status(500).json({ error: 'Error al agregar producto' });
@@ -73,7 +79,7 @@ app.post('/menu', async (req, res) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
 
