@@ -78,6 +78,11 @@ io.on('connection', (socket) => {
             cb && cb({ ok: false, error: 'Contraseña incorrecta' });
             return;
         }
+        // Verifica que el nombre de usuario no esté repetido en la sala
+        if (r.users.has(username)) {
+            cb && cb({ ok: false, error: 'Ese nombre ya está en uso en la sala. Elige otro.' });
+            return;
+        }
         // Si ya estaba en otra sala, salir de esa sala
         if (socket.room && rooms[socket.room]) {
             rooms[socket.room].users.delete(socket.username);
