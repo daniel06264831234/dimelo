@@ -2,14 +2,15 @@ const express = require('express');
 const path = require('path');
 const bodyParser = require('body-parser');
 const { MongoClient } = require('mongodb');
-const cors = require('cors'); // <-- Agrega esta línea
-const http = require('http').createServer(app);
+const cors = require('cors');
+
+const app = express(); // <-- Primero declara app
+const http = require('http').createServer(app); // <-- Luego usa app aquí
 const { Server } = require('socket.io');
 const io = new Server(http, {
     cors: { origin: '*' }
 });
 
-const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors()); // <-- Permite peticiones desde cualquier origen
