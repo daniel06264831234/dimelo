@@ -2,10 +2,12 @@ const express = require('express');
 const path = require('path');
 const bodyParser = require('body-parser');
 const { MongoClient } = require('mongodb');
+const cors = require('cors'); // <-- Agrega esta línea
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(cors()); // <-- Permite peticiones desde cualquier origen
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
 
