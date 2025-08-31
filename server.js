@@ -1,151 +1,57 @@
 const express = require('express');
-const http = require('http');
 const path = require('path');
-const socketIo = require('socket.io');
+const bodyParser = require('body-parser');
+const { MongoClient } = require('mongodb');
 
 const app = express();
-const server = http.createServer(app);
-const io = socketIo(server);
+const PORT = 3000;
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json());
 
-// Estructura para salas: { [roomName]: { type, password, users: Set, timeout: Timeout } }
-const rooms = {};
-const INACTIVITY_MS = 5 * 60 * 1000; // 5 minutos
+const pedidos = []; // Almacena los pedidos en memoria
 
-function resetRoomTimeout(room) {
-    if (!rooms[room]) return;
-    if (rooms[room].timeout) clearTimeout(rooms[room].timeout);
-    rooms[room].timeout = setTimeout(() => {
-        // Notifica y elimina la sala por inactividad
-        io.to(room).emit('message', { user: 'Sistema', text: 'La sala se cerró por inactividad.' });
-        io.to(room).emit('room closed');
-        // Expulsa a todos los sockets de la sala
-        const clients = io.sockets.adapter.rooms.get(room);
-        if (clients) {
-            for (const socketId of clients) {
-                const s = io.sockets.sockets.get(socketId);
-                if (s) {
-                    s.leave(room);
-                    if (s.room === room) s.room = null;
-                }
-            }
-        }
-        delete rooms[room];
-    }, INACTIVITY_MS);
+app.post('/pedido', (req, res) => {
+    const pedido = req.body;
+    pedidos.push(pedido); // Guarda el pedido en memoria
+    console.log('Pedido recibido:', pedido);
+    res.json({ mensaje: 'Pedido recibido. ¡Gracias!' });
+});
+
+// Ruta para ver todos los pedidos anotados
+app.get('/pedidos', (req, res) => {
+    res.json(pedidos);
+});
+
+const MONGO_URI = 'mongodb+srv://daniel:daniel25@so.k6u9iol.mongodb.net/?retryWrites=true&w=majority&appName=so&authSource=admin';
+const DB_NAME = 'so';
+const MENU_COLLECTION = 'menu';
+
+let menuItems = [];
+
+async function cargarMenu() {
+    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db(DB_NAME);
+        const items = await db.collection(MENU_COLLECTION).find().toArray();
+        menuItems = items;
+        console.log('Menú cargado desde MongoDB:', menuItems);
+    } catch (err) {
+        console.error('Error cargando menú:', err);
+    } finally {
+        await client.close();
+    }
 }
 
-io.on('connection', (socket) => {
-    socket.on('create room', ({ room, type, password }, cb) => {
-        if (rooms[room]) {
-            cb && cb({ ok: false, error: 'La sala ya existe' });
-            return;
-        }
-        rooms[room] = { type, password: password || null, users: new Set() };
-        resetRoomTimeout(room);
-        cb && cb({ ok: true });
-    });
+// Cargar menú al iniciar el servidor
+cargarMenu();
 
-    socket.on('get users in room', () => {
-        if (socket.room && rooms[socket.room]) {
-            io.to(socket.id).emit('users in room', Array.from(rooms[socket.room].users));
-        }
-    });
-
-    socket.on('leave room', () => {
-        if (socket.room && rooms[socket.room]) {
-            rooms[socket.room].users.delete(socket.username);
-            socket.leave(socket.room);
-            io.to(socket.room).emit('message', { user: 'Sistema', text: `${socket.username} ha salido de la sala.` });
-            io.to(socket.room).emit('update users');
-            if (rooms[socket.room].users.size === 0) {
-                clearTimeout(rooms[socket.room].timeout);
-                delete rooms[socket.room];
-            } else {
-                resetRoomTimeout(socket.room);
-            }
-            socket.room = null;
-        }
-    });
-
-    socket.on('join room', ({ room, username, password }, cb) => {
-        const r = rooms[room];
-        if (!r) {
-            cb && cb({ ok: false, error: 'La sala no existe' });
-            return;
-        }
-        if (r.password && r.password !== password) {
-            cb && cb({ ok: false, error: 'Contraseña incorrecta' });
-            return;
-        }
-        // Verifica que el nombre de usuario no esté repetido en la sala
-        if (r.users.has(username)) {
-            cb && cb({ ok: false, error: 'Ese nombre ya está en uso en la sala. Elige otro.' });
-            return;
-        }
-        // Si ya estaba en otra sala, salir de esa sala
-        if (socket.room && rooms[socket.room]) {
-            rooms[socket.room].users.delete(socket.username);
-            socket.leave(socket.room);
-            io.to(socket.room).emit('message', { user: 'Sistema', text: `${socket.username} ha salido de la sala.` });
-            io.to(socket.room).emit('update users');
-            if (rooms[socket.room].users.size === 0) {
-                clearTimeout(rooms[socket.room].timeout);
-                delete rooms[socket.room];
-            } else {
-                resetRoomTimeout(socket.room);
-            }
-        }
-        socket.username = username;
-        socket.room = room;
-        r.users.add(username);
-        socket.join(room);
-        socket.to(room).emit('message', { user: 'Sistema', text: `${username} se ha unido a la sala.` });
-        io.to(room).emit('update users');
-        resetRoomTimeout(room);
-        cb && cb({ ok: true, type: r.type });
-    });
-
-    socket.on('chat message', (msg) => {
-        if (socket.room && rooms[socket.room]) {
-            io.to(socket.room).emit('message', { user: socket.username, text: msg });
-            resetRoomTimeout(socket.room);
-        }
-    });
-
-    socket.on('chat image', (imgData) => {
-        if (socket.room && rooms[socket.room]) {
-            io.to(socket.room).emit('message', { user: socket.username, type: 'image', data: imgData });
-            resetRoomTimeout(socket.room);
-        }
-    });
-
-    socket.on('get rooms', (cb) => {
-        cb && cb(Object.entries(rooms).map(([name, r]) => ({
-            name,
-            type: r.type,
-            private: !!r.password
-        })));
-    });
-
-    socket.on('disconnect', () => {
-        if (socket.room && rooms[socket.room]) {
-            rooms[socket.room].users.delete(socket.username);
-            io.to(socket.room).emit('message', { user: 'Sistema', text: `${socket.username} ha salido de la sala.` });
-            io.to(socket.room).emit('update users');
-            if (rooms[socket.room].users.size === 0) {
-                clearTimeout(rooms[socket.room].timeout);
-                delete rooms[socket.room];
-            } else {
-                resetRoomTimeout(socket.room);
-            }
-        }
-    });
+// Ruta para obtener el menú desde la base de datos
+app.get('/menu', (req, res) => {
+    res.json(menuItems);
 });
 
-const PORT = process.env.PORT || 3000;
-const HOST = '0.0.0.0';
-server.listen(PORT, HOST, () => {
-    console.log(`Servidor escuchando en http://${HOST}:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-
