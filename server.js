@@ -52,8 +52,23 @@ app.get('/menu', (req, res) => {
     res.json(menuItems);
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
+app.post('/menu', async (req, res) => {
+    const { nombre, precio } = req.body;
+    if (!nombre || typeof precio !== 'number') {
+        return res.status(400).json({ error: 'Nombre y precio requeridos' });
+    }
+    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db(DB_NAME);
+        const result = await db.collection(MENU_COLLECTION).insertOne({ nombre, precio });
+        await cargarMenu(); // Actualiza el menú en memoria
+        res.json({ mensaje: 'Producto agregado', id: result.insertedId });
+    } catch (err) {
+        res.status(500).json({ error: 'Error al agregar producto' });
+    } finally {
+        await client.close();
+    }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
