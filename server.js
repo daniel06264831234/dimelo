@@ -145,18 +145,18 @@ app.get('/menu', async (req, res) => {
         // Obtén todos los ids de imágenes existentes en GridFS
         const imagenes = await db.collection('imagenesMenu.files').find({}, { projection: { _id: 1 } }).toArray();
         const imagenIds = imagenes.map(img => String(img._id));
-        // Filtra productos que tengan imagenId válida
+        // Filtra productos que tengan imagenId válida (ObjectId y existe en GridFS)
         const menuConImagenIdString = menuItems
             .map(item => ({
                 ...item,
-                imagenId: item.imagenId ? String(item.imagenId) : undefined
+                imagenId: item.imagenId && /^[a-fA-F0-9]{24}$/.test(String(item.imagenId)) ? String(item.imagenId) : undefined
             }))
             .filter(item => !item.imagenId || imagenIds.includes(item.imagenId));
         res.json(menuConImagenIdString);
     } catch (err) {
         res.json(menuItems.map(item => ({
             ...item,
-            imagenId: item.imagenId ? String(item.imagenId) : undefined
+            imagenId: item.imagenId && /^[a-fA-F0-9]{24}$/.test(String(item.imagenId)) ? String(item.imagenId) : undefined
         })));
     } finally {
         await client.close();
@@ -262,4 +262,6 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
+
+
 
