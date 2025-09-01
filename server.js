@@ -15,6 +15,15 @@ const io = new Server(http, {
 
 const PORT = process.env.PORT || 3000;
 
+// --- Middleware CORS manual extra (respaldo) ---
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+});
+
 // --- Mueve esto antes de express.static ---
 app.use(cors()); // <-- Permite peticiones desde cualquier origen
 
@@ -153,8 +162,10 @@ app.get('/menu/imagen/:id', async (req, res) => {
 
 // Reemplaza el endpoint POST /menu para usar multer
 app.post('/menu', upload.single('imagen'), async (req, res) => {
+    console.log('POST /menu llamado');
     const { nombre, precio, descripcion } = req.body;
     if (!nombre || typeof precio === 'undefined' || !descripcion || !req.file) {
+        console.log('Faltan datos en el body:', req.body, 'file:', !!req.file);
         return res.status(400).json({ error: 'Nombre, precio, descripción e imagen requeridos' });
     }
     const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
@@ -180,6 +191,7 @@ app.post('/menu', upload.single('imagen'), async (req, res) => {
             res.json({ mensaje: 'Producto agregado', id: result.insertedId });
         });
     } catch (err) {
+        console.error('Error en POST /menu:', err);
         res.status(500).json({ error: 'Error al agregar producto' });
     } finally {
         // No cierres el cliente aquí porque el stream puede seguir abierto
@@ -219,4 +231,5 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
+
 
