@@ -186,46 +186,28 @@ app.get('/menu/imagen/:id', async (req, res) => {
     }
 });
 
-// Reemplaza el endpoint POST /menu para usar multer
-app.post('/menu', upload.single('nuevaImagen'), async (req, res) => {
-    console.log('POST /menu llamado');
+// Reemplaza el endpoint POST /menu para aceptar solo nombre, precio y descripción
+app.post('/menu', async (req, res) => {
     const { nombre, precio, descripcion } = req.body;
-    if (!nombre || typeof precio === 'undefined' || !descripcion || !req.file) {
-        console.log('Faltan datos en el body:', req.body, 'file:', !!req.file);
-        return res.status(400).json({ error: 'Nombre, precio, descripción e imagen requeridos' });
+    if (!nombre || typeof precio === 'undefined' || !descripcion) {
+        return res.status(400).json({ error: 'Nombre, precio y descripción requeridos' });
     }
     const client = new MongoClient(MONGO_URI);
     try {
         await client.connect();
         const db = client.db(DB_NAME);
-        const bucket = new GridFSBucket(db, { bucketName: 'imagenesMenu' });
-        const uploadStream = bucket.openUploadStream(req.file.originalname, {
-            contentType: req.file.mimetype
+        const result = await db.collection(MENU_COLLECTION).insertOne({
+            nombre,
+            precio: parseFloat(precio),
+            descripcion
         });
-        uploadStream.end(req.file.buffer);
-        uploadStream.on('finish', async () => {
-            console.log('Imagen subida a GridFS con id:', uploadStream.id);
-            // Verifica que la imagen existe en GridFS antes de insertar el producto
-            const img = await db.collection('imagenesMenu.files').findOne({ _id: uploadStream.id });
-            if (!img) {
-                console.error('La imagen no se guardó correctamente en GridFS');
-                return res.status(500).json({ error: 'Error al guardar la imagen' });
-            }
-            const result = await db.collection(MENU_COLLECTION).insertOne({
-                nombre,
-                precio: parseFloat(precio),
-                descripcion,
-                imagenId: uploadStream.id
-            });
-            await cargarMenu();
-            io.emit('menuActualizado');
-            res.json({ mensaje: 'Producto agregado', id: result.insertedId });
-        });
+        await cargarMenu();
+        io.emit('menuActualizado');
+        res.json({ mensaje: 'Producto agregado', id: result.insertedId });
     } catch (err) {
-        console.error('Error en POST /menu:', err);
         res.status(500).json({ error: 'Error al agregar producto' });
     } finally {
-        // No cierres el cliente aquí porque el stream puede seguir abierto
+        await client.close();
     }
 });
 
@@ -262,6 +244,4 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-
-
-
+    
