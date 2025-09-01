@@ -1,9 +1,10 @@
 const express = require('express');
 const path = require('path');
 const bodyParser = require('body-parser');
-const { MongoClient } = require('mongodb');
+const { MongoClient, GridFSBucket, ObjectId } = require('mongodb');
 const cors = require('cors');
 const fs = require('fs');
+const multer = require('multer');
 
 const app = express(); // <-- Primero declara app
 const http = require('http').createServer(app); // <-- Luego usa app aquí
@@ -17,6 +18,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors()); // <-- Permite peticiones desde cualquier origen
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const pedidos = []; // Almacena los pedidos en memoria
 
@@ -101,9 +104,11 @@ const DB_NAME = 'so';
 const MENU_COLLECTION = 'menu';
 
 let menuItems = [];
+let dbClient; // Para GridFS
 
 async function cargarMenu() {
     const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    dbClient = client;
     try {
         await client.connect();
         const db = client.db(DB_NAME);
@@ -125,21 +130,84 @@ app.get('/menu', (req, res) => {
     res.json(menuItems);
 });
 
-app.post('/menu', async (req, res) => {
-    const { nombre, precio } = req.body;
-    if (!nombre || typeof precio !== 'number') {
-        return res.status(400).json({ error: 'Nombre y precio requeridos' });
+// Endpoint para obtener imagen de GridFS
+app.get('/menu/imagen/:id', async (req, res) => {
+    const fileId = req.params.id;
+    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db(DB_NAME);
+        const bucket = new GridFSBucket(db, { bucketName: 'imagenesMenu' });
+        const _id = new ObjectId(fileId);
+        const downloadStream = bucket.openDownloadStream(_id);
+        downloadStream.on('error', () => res.status(404).end());
+        downloadStream.pipe(res);
+    } catch (err) {
+        res.status(500).end();
+    } finally {
+        await client.close();
+    }
+});
+
+app.post('/menu', upload.single('imagen'), async (req, res) => {
+    const { nombre, precio, descripcion } = req.body;
+    if (!nombre || typeof precio === 'undefined' || !descripcion || !req.file) {
+        return res.status(400).json({ error: 'Nombre, precio, descripción e imagen requeridos' });
     }
     const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
     try {
         await client.connect();
         const db = client.db(DB_NAME);
-        const result = await db.collection(MENU_COLLECTION).insertOne({ nombre, precio });
-        await cargarMenu(); // Actualiza el menú en memoria
-        io.emit('menuActualizado'); // Notifica a todos los clientes
-        res.json({ mensaje: 'Producto agregado', id: result.insertedId });
+        // Guardar imagen en GridFS
+        const bucket = new GridFSBucket(db, { bucketName: 'imagenesMenu' });
+        const uploadStream = bucket.openUploadStream(req.file.originalname, {
+            contentType: req.file.mimetype
+        });
+        uploadStream.end(req.file.buffer);
+        uploadStream.on('finish', async (file) => {
+            // Guarda el producto con referencia a la imagen y descripción
+            const result = await db.collection(MENU_COLLECTION).insertOne({
+                nombre,
+                precio: parseFloat(precio),
+                descripcion,
+                imagenId: file._id
+            });
+            await cargarMenu();
+            io.emit('menuActualizado');
+            res.json({ mensaje: 'Producto agregado', id: result.insertedId });
+        });
     } catch (err) {
         res.status(500).json({ error: 'Error al agregar producto' });
+    } finally {
+        // No cierres el cliente aquí porque el stream puede seguir abierto
+    }
+});
+
+app.delete('/menu/:id', async (req, res) => {
+    const id = req.params.id;
+    // Validar que el id sea un ObjectId válido
+    if (!/^[a-fA-F0-9]{24}$/.test(id)) {
+        return res.status(400).json({ error: 'ID de producto inválido' });
+    }
+    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db(DB_NAME);
+        // Elimina el producto
+        const prod = await db.collection(MENU_COLLECTION).findOneAndDelete({ _id: new ObjectId(id) });
+        // Elimina la imagen de GridFS si existe
+        if (prod.value && prod.value.imagenId) {
+            const bucket = new GridFSBucket(db, { bucketName: 'imagenesMenu' });
+            try { await bucket.delete(new ObjectId(prod.value.imagenId)); } catch {}
+        }
+        await cargarMenu();
+        io.emit('menuActualizado');
+        if (!prod.value) {
+            return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: 'No se pudo eliminar el producto' });
     } finally {
         await client.close();
     }
@@ -148,4 +216,3 @@ app.post('/menu', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-
