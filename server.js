@@ -138,7 +138,12 @@ cargarMenu();
 
 // Ruta para obtener el menú desde la base de datos
 app.get('/menu', (req, res) => {
-    res.json(menuItems);
+    // Convierte imagenId a string si existe
+    const menuConImagenIdString = menuItems.map(item => ({
+        ...item,
+        imagenId: item.imagenId ? String(item.imagenId) : undefined
+    }));
+    res.json(menuConImagenIdString);
 });
 
 // Endpoint para obtener imagen de GridFS
@@ -231,3 +236,4 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
+
