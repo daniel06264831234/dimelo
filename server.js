@@ -166,6 +166,10 @@ app.get('/menu', async (req, res) => {
 // Endpoint para obtener imagen de GridFS
 app.get('/menu/imagen/:id', async (req, res) => {
     const fileId = req.params.id;
+    // Solo intenta si el id es un ObjectId válido
+    if (!/^[a-fA-F0-9]{24}$/.test(fileId)) {
+        return res.status(404).end();
+    }
     const client = new MongoClient(MONGO_URI);
     try {
         await client.connect();
@@ -258,5 +262,4 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-
 
