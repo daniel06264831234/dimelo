@@ -15,7 +15,9 @@ const io = new Server(http, {
 
 const PORT = process.env.PORT || 3000;
 
+// --- Mueve esto antes de express.static ---
 app.use(cors()); // <-- Permite peticiones desde cualquier origen
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
 
@@ -217,4 +219,4 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-      
+
