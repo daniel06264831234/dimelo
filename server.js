@@ -118,7 +118,7 @@ let menuItems = [];
 let dbClient; // Para GridFS
 
 async function cargarMenu() {
-    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    const client = new MongoClient(MONGO_URI);
     dbClient = client;
     try {
         await client.connect();
@@ -144,7 +144,7 @@ app.get('/menu', (req, res) => {
 // Endpoint para obtener imagen de GridFS
 app.get('/menu/imagen/:id', async (req, res) => {
     const fileId = req.params.id;
-    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    const client = new MongoClient(MONGO_URI);
     try {
         await client.connect();
         const db = client.db(DB_NAME);
@@ -168,7 +168,7 @@ app.post('/menu', upload.single('nuevaImagen'), async (req, res) => {
         console.log('Faltan datos en el body:', req.body, 'file:', !!req.file);
         return res.status(400).json({ error: 'Nombre, precio, descripción e imagen requeridos' });
     }
-    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    const client = new MongoClient(MONGO_URI);
     try {
         await client.connect();
         const db = client.db(DB_NAME);
@@ -178,13 +178,13 @@ app.post('/menu', upload.single('nuevaImagen'), async (req, res) => {
             contentType: req.file.mimetype
         });
         uploadStream.end(req.file.buffer);
-        uploadStream.on('finish', async (file) => {
-            // Guarda el producto con referencia a la imagen y descripción
+        uploadStream.on('finish', async () => {
+            // Usa uploadStream.id en vez de file._id
             const result = await db.collection(MENU_COLLECTION).insertOne({
                 nombre,
                 precio: parseFloat(precio),
                 descripcion,
-                imagenId: file._id
+                imagenId: uploadStream.id
             });
             await cargarMenu();
             io.emit('menuActualizado');
@@ -204,7 +204,7 @@ app.delete('/menu/:id', async (req, res) => {
     if (!/^[a-fA-F0-9]{24}$/.test(id)) {
         return res.status(400).json({ error: 'ID de producto inválido' });
     }
-    const client = new MongoClient(MONGO_URI, { useUnifiedTopology: true });
+    const client = new MongoClient(MONGO_URI);
     try {
         await client.connect();
         const db = client.db(DB_NAME);
@@ -231,6 +231,3 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-
-
-
