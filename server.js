@@ -161,7 +161,7 @@ app.get('/menu/imagen/:id', async (req, res) => {
 });
 
 // Reemplaza el endpoint POST /menu para usar multer
-app.post('/menu', upload.single('imagen'), async (req, res) => {
+app.post('/menu', upload.single('nuevaImagen'), async (req, res) => {
     console.log('POST /menu llamado');
     const { nombre, precio, descripcion } = req.body;
     if (!nombre || typeof precio === 'undefined' || !descripcion || !req.file) {
@@ -231,5 +231,6 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
+
 
 
