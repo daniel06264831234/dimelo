@@ -177,14 +177,19 @@ app.post('/menu', upload.single('nuevaImagen'), async (req, res) => {
     try {
         await client.connect();
         const db = client.db(DB_NAME);
-        // Guardar imagen en GridFS
         const bucket = new GridFSBucket(db, { bucketName: 'imagenesMenu' });
         const uploadStream = bucket.openUploadStream(req.file.originalname, {
             contentType: req.file.mimetype
         });
         uploadStream.end(req.file.buffer);
         uploadStream.on('finish', async () => {
-            // Usa uploadStream.id en vez de file._id
+            console.log('Imagen subida a GridFS con id:', uploadStream.id);
+            // Verifica que la imagen existe en GridFS antes de insertar el producto
+            const img = await db.collection('imagenesMenu.files').findOne({ _id: uploadStream.id });
+            if (!img) {
+                console.error('La imagen no se guardó correctamente en GridFS');
+                return res.status(500).json({ error: 'Error al guardar la imagen' });
+            }
             const result = await db.collection(MENU_COLLECTION).insertOne({
                 nombre,
                 precio: parseFloat(precio),
