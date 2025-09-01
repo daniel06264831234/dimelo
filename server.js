@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const { MongoClient, GridFSBucket, ObjectId } = require('mongodb');
 const cors = require('cors');
 const fs = require('fs');
+const multer = require('multer'); // <--- Agrega multer
 
 const app = express(); // <-- Primero declara app
 const http = require('http').createServer(app); // <-- Luego usa app aquí
@@ -17,6 +18,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors()); // <-- Permite peticiones desde cualquier origen
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
+
+const upload = multer({ storage: multer.memoryStorage() }); // <--- Configura multer
 
 const pedidos = []; // Almacena los pedidos en memoria
 
@@ -146,7 +149,8 @@ app.get('/menu/imagen/:id', async (req, res) => {
     }
 });
 
-app.post('/menu', async (req, res) => {
+// Reemplaza el endpoint POST /menu para usar multer
+app.post('/menu', upload.single('imagen'), async (req, res) => {
     const { nombre, precio, descripcion } = req.body;
     if (!nombre || typeof precio === 'undefined' || !descripcion || !req.file) {
         return res.status(400).json({ error: 'Nombre, precio, descripción e imagen requeridos' });
@@ -213,3 +217,4 @@ app.delete('/menu/:id', async (req, res) => {
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
+      
